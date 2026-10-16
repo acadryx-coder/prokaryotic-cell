@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<title>Prokaryotic Cell — Cross-Section</title>
+<style>
+  :root { --muted:#8aa3b8; --stroke:rgba(140,200,220,0.18); }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; background:#060f14; }
+  body {
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color:#c8dcea; -webkit-font-smoothing:antialiased;
+    background: radial-gradient(ellipse 70% 60% at 50% 45%, #0e2128 0%, #071519 45%, #030a0d 100%);
+  }
+  canvas { display:block; position:fixed; inset:0; }
+
+  .panel {
+    background: rgba(10, 22, 28, 0.9);
+    border: 1px solid var(--stroke);
+    border-radius: 12px;
+    box-shadow: 0 8px 30px rgba(0,0,0,.6);
+  }
+
+  #labels { position:fixed; inset:0; z-index:3; pointer-events:none; overflow:hidden; }
+  .label {
+    position:absolute; left:0; top:0;
+    font-size:10.5px; font-weight:600; letter-spacing:.14em; text-transform:uppercase;
+    color:rgba(200,225,235,0.85); white-space:nowrap;
+    padding:3px 7px; border-radius:4px;
+    background: rgba(8,20,26,0.7);
+    border:1px solid rgba(140,210,225,0.18);
+    pointer-events:auto; cursor:pointer; user-select:none;
+    will-change: transform;
+  }
+  .label:hover { color:#fff; border-color:rgba(140,225,235,0.55); }
+  .label.active {
+    color:#fff; background:rgba(20,60,72,0.9);
+    border-color:rgba(150,235,240,0.75);
+    box-shadow: 0 0 14px rgba(100,220,230,0.35);
+  }
+
+  #title { position:fixed; top:20px; left:22px; z-index:5; pointer-events:none; }
+  #title h1 { font-size:13px; font-weight:600; letter-spacing:.3em; text-transform:uppercase; color:#dff2f4; }
+  #title p { margin-top:5px; font-size:9.5px; letter-spacing:.22em; text-transform:uppercase; color:var(--muted); }
+
+  #hud {
+    position:fixed; bottom:22px; left:50%; transform:translateX(-50%); z-index:5;
+    display:flex; align-items:center; gap:10px; padding:8px 14px;
+    flex-wrap:wrap; justify-content:center; max-width:calc(100vw - 24px);
+  }
+  .divider { width:1px; height:20px; background:rgba(140,200,220,.25); }
+  .toggle {
+    font-family:inherit; font-size:9.5px; letter-spacing:.16em; text-transform:uppercase;
+    color:var(--muted); background:transparent;
+    border:1px solid rgba(140,200,220,.18); border-radius:7px;
+    padding:7px 11px; cursor:pointer; white-space:nowrap; transition:all .2s;
+  }
+  .toggle:hover { color:#dff6ff; border-color:rgba(140,220,235,.5); }
+  .toggle.active {
+    color:#eafaff; background:rgba(28,90,110,0.55);
+    border-color:rgba(150,230,240,0.7);
+    box-shadow: 0 0 10px rgba(80,200,220,.2) inset;
+  }
+
+  #info {
+    position:fixed; top:50%; right:22px;
+    transform: translate(22px, -50%);
+    width: 292px; max-height: calc(100vh - 140px); overflow-y:auto; z-index:6;
+    padding: 18px 18px 16px;
+    opacity:0; pointer-events:none;
+    transition: opacity .25s ease, transform .25s ease;
+  }
+  #info.show { opacity:1; pointer-events:auto; transform: translate(0, -50%); }
+  #info::-webkit-scrollbar { width:4px; }
+  #info::-webkit-scrollbar-thumb { background:rgba(140,200,220,.3); border-radius:4px; }
+
+  .info-head { display:flex; align-items:center; gap:9px; margin-bottom:3px; }
+  .swatch { width:11px; height:11px; border-radius:50%; background:currentColor; flex-shrink:0; box-shadow:0 0 8px currentColor; }
+  #infoName { font-size:18px; font-weight:600; letter-spacing:.04em; color:#f0faff; }
+  #infoType { font-size:9.5px; letter-spacing:.2em; text-transform:uppercase; color:var(--muted); margin-bottom:12px; display:block; }
+  #infoDesc { font-size:12.5px; line-height:1.6; color:#a8bfcf; margin-bottom:14px; }
+  #infoStats { display:grid; gap:1px; border-radius:7px; overflow:hidden; }
+  .stat { display:flex; justify-content:space-between; align-items:baseline; gap:10px; padding:7px 9px; background:rgba(255,255,255,0.03); }
+  .stat dt { font-size:9.5px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); white-space:nowrap; }
+  .stat dd { font-size:11.5px; color:#cfe6f5; text-align:right; }
+  #infoClose {
+    position:absolute; top:10px; right:10px; width:22px; height:22px;
+    display:grid; place-items:center; border-radius:6px; border:none;
+    background:transparent; color:var(--muted); font-size:15px; cursor:pointer;
+  }
+  #infoClose:hover { background:rgba(255,255,255,.08); color:#dff6ff; }
+
+  #hint {
+    position:fixed; bottom:22px; right:22px;
+    font-size:9.5px; letter-spacing:.16em; text-transform:uppercase;
+    color:rgba(140,180,200,0.5); z-index:4; pointer-events:none;
+  }
+
+  @media (max-width:760px) {
+    #title { top:14px; left:14px; }
+    #title h1 { font-size:10.5px; }
+    #title p { display:none; }
+    #hud { bottom:12px; padding:6px 10px; gap:7px; }
+    .toggle { padding:6px 8px; font-size:9px; }
+    #info { top:auto; bottom:0; left:0; right:0; width:100%; max-height:44vh;
+            border-radius:14px 14px 0 0; transform: translateY(20px); }
+    #info.show { transform: translateY(0); }
+    #hint { display:none; }
+  }
+</style>
+</head>
+<body>
+
+<canvas id="scene"></canvas>
+<div id="labels"></div>
+
+<div id="title">
+  <h1>Prokaryotic Bacterial Cell</h1>
+  <p>Cross-Section · No nucleus, no membrane-bound organelles</p>
+</div>
+
+<div id="hud" class="panel">
+  <button id="cutBtn" class="toggle active">Cross-Section</button>
+  <button id="labelsBtn" class="toggle active">Labels</button>
+  <div class="divider"></div>
+  <button id="spinBtn" class="toggle">Auto-Spin</button>
+  <button id="resetBtn" class="toggle">Reset</button>
+</div>
+
+<aside id="info" class="panel">
+  <button id="infoClose" aria-label="Close">✕</button>
+  <div class="info-head">
+    <span class="swatch" id="infoSwatch"></span>
+    <h2 id="infoName">Nucleoid</h2>
+  </div>
+  <span id="infoType">Genetic material</span>
+  <p id="infoDesc"></p>
+  <dl id="infoStats"></dl>
+</aside>
+
+<div id="hint">Drag to orbit · Scroll to zoom · Click a structure</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+/* ============================================================
+   RENDERER
+   ============================================================ */
+const canvas = document.getElementById('scene');
+const renderer = new THREE.WebGLRenderer({
+  canvas, antialias: false, alpha: false,
+  powerPreference: 'low-power', stencil: false,
+});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setClearColor(0x07131a, 1);
+renderer.localClippingEnabled = true;
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(34, window.innerWidth / window.innerHeight, 0.1, 200);
+const cameraHome = new THREE.Vector3(0, 2.2, 26);
+camera.position.copy(cameraHome);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = false;
+controls.enablePan = false;
+controls.rotateSpeed = 0.5;
+controls.zoomSpeed = 0.9;
+controls.minDistance = 10;
+controls.maxDistance = 55;
+controls.minPolarAngle = Math.PI * 0.18;
+controls.maxPolarAngle = Math.PI * 0.82;
+
+/* ============================================================
+   LIGHTING
+   ============================================================ */
+scene.add(new THREE.AmbientLight(0xffffff, 1.05));
+const keyL = new THREE.DirectionalLight(0xffffff, 0.55);
+keyL.position.set(-6, 10, 14);
+scene.add(keyL);
+const fillL = new THREE.DirectionalLight(0xbfe0e8, 0.30);
+fillL.position.set(8, -4, 10);
+scene.add(fillL);
+
+/* ============================================================
+   CUT PLANE
+   ============================================================ */
+const cutPlane = new THREE.Plane(new THREE.Vector3(0, 0, -1), 0);
+const clipList = [cutPlane];
+let cutaway = true;
+let cutTarget = 0;
+let cutCurrent = 0;
+
+/* ============================================================
+   PALETTE
+   ============================================================ */
+const COL = {
+  capsule:    0x8fc8bd,
+  capsuleHi:  0xb8e0d8,
+  wall:       0xc9a94f,
+  wallHi:     0xe0c778,
+  membrane:   0x3d8a95,
+  membraneHi: 0x6bb4bf,
+  cytoplasm:  0xc2dbe6,
+  cytoplasmD: 0xa8c8d4,
+  nucleoidA:  0x4a4f9c,
+  nucleoidB:  0x6a72b8,
+  nucleoidGlow: 0x8a8fd8,
+  ribosome:   0x547a94,
+};
+
+/* ============================================================
+   HELPERS
+   ============================================================ */
+function makeRng(seed) {
+  let s = seed >>> 0;
+  return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
+}
+
+function makeWallTexture() {
+  const W = 128, H = 64;
+  const cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  const ctx = cv.getContext('2d');
+  ctx.fillStyle = '#c9a94f';
+  ctx.fillRect(0, 0, W, H);
+
+  const rng = makeRng(4021);
+  for (let i = 0; i < 46; i++) {
+    const x = rng() * W;
+    ctx.strokeStyle = `rgba(120, 90, 30, ${0.05 + rng() * 0.10})`;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x + (rng() - 0.5) * 5, H);
+    ctx.stroke();
+  }
+  for (let i = 0; i < 220; i++) {
+    const x = rng() * W, y = rng() * H;
+    ctx.fillStyle = `rgba(232, 212, 152, ${0.14 + rng() * 0.22})`;
+    ctx.fillRect(x, y, 1, 1);
+  }
+  const tex = new THREE.CanvasTexture(cv);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(6, 3);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.generateMipmaps = false;
+  tex.minFilter = THREE.LinearFilter;
+  return tex;
+}
+
+function makeGlowTexture() {
+  const S = 256;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = S;
+  const ctx = cv.getContext('2d');
+  const g = ctx.createRadialGradient(S/2, S/2, 0, S/2, S/2, S/2);
+  g.addColorStop(0.00, 'rgba(150, 200, 220, 0.32)');
+  g.addColorStop(0.35, 'rgba(90, 150, 180, 0.14)');
+  g.addColorStop(0.70, 'rgba(50, 100, 130, 0.04)');
+  g.addColorStop(1.00, 'rgba(30, 70, 100, 0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, S, S);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+/* ============================================================
+   BACKGROUND HALO
+   ============================================================ */
+const halo = new THREE.Sprite(new THREE.SpriteMaterial({
+  map: makeGlowTexture(),
+  transparent: true,
+  depthWrite: false,
+  blending: THREE.AdditiveBlending,
+}));
+halo.scale.set(30, 22, 1);
+halo.position.z = -8;
+scene.add(halo);
+
+/* ============================================================
+   CELL
+   ============================================================ */
+const XS = 1.35;
+const cell = new THREE.Group();
+cell.scale.set(XS, 1, 1);
+scene.add(cell);
+
+const R = {
+  capsuleOuter: 1.00,
+  capsuleInner: 0.960,
+  wallOuter:    0.955,
+  wallInner:    0.870,
+  memOuter:     0.860,
+  memInner:     0.830,
+  cytoR:        0.825,
+};
+
+const SHELL_SEG = 40, SHELL_RING = 24;
+const RING_SEG = 72;
+
+function shellGeo(r) { return new THREE.SphereGeometry(r, SHELL_SEG, SHELL_RING); }
+function ringGeo(i, o) { return new THREE.RingGeometry(i, o, RING_SEG); }
+
+const shellGroup = new THREE.Group();
+const cutGroup = new THREE.Group();
+cell.add(shellGroup, cutGroup);
+
+/* 1. Capsule */
+const capsuleMat = new THREE.MeshLambertMaterial({
+  color: COL.capsule, side: THREE.DoubleSide, clippingPlanes: clipList,
+});
+shellGroup.add(new THREE.Mesh(shellGeo(R.capsuleOuter), capsuleMat));
+
+const capsuleInnerMat = new THREE.MeshBasicMaterial({
+  color: COL.capsuleHi, transparent: true, opacity: 0.20,
+  side: THREE.DoubleSide, depthWrite: false,
+  blending: THREE.AdditiveBlending, clippingPlanes: clipList,
+});
+shellGroup.add(new THREE.Mesh(shellGeo(R.capsuleInner), capsuleInnerMat));
+
+const capsuleCutMat = new THREE.MeshBasicMaterial({ color: COL.capsule, side: THREE.DoubleSide });
+cutGroup.add(new THREE.Mesh(ringGeo(R.wallOuter, R.capsuleOuter), capsuleCutMat));
+
+const capsuleCutEdge = new THREE.MeshBasicMaterial({
+  color: COL.capsuleHi, transparent: true, opacity: 0.55, side: THREE.DoubleSide,
+});
+cutGroup.add(new THREE.Mesh(ringGeo(R.capsuleInner, R.wallOuter), capsuleCutEdge));
+
+/* 2. Cell wall */
+const wallTexture = makeWallTexture();
+const wallMat = new THREE.MeshLambertMaterial({
+  map: wallTexture, color: 0xffffff,
+  side: THREE.DoubleSide, clippingPlanes: clipList,
+});
+shellGroup.add(new THREE.Mesh(shellGeo(R.wallOuter), wallMat));
+shellGroup.add(new THREE.Mesh(shellGeo(R.wallInner), wallMat));
+
+const wallCutMat = new THREE.MeshBasicMaterial({ color: COL.wall, side: THREE.DoubleSide });
+cutGroup.add(new THREE.Mesh(ringGeo(R.wallInner, R.wallOuter), wallCutMat));
+
+const wallCutEdge = new THREE.MeshBasicMaterial({
+  color: COL.wallHi, transparent: true, opacity: 0.6, side: THREE.DoubleSide,
+});
+cutGroup.add(new THREE.Mesh(ringGeo(R.wallInner, R.wallInner + 0.018), wallCutEdge));
+
+/* 3. Cell membrane */
+const memMat = new THREE.MeshLambertMaterial({
+  color: COL.membrane, side: THREE.DoubleSide, clippingPlanes: clipList,
+});
+shellGroup.add(new THREE.Mesh(shellGeo(R.memOuter), memMat));
+shellGroup.add(new THREE.Mesh(shellGeo(R.memInner), memMat));
+
+const memCutMat = new THREE.MeshBasicMaterial({ color: COL.membrane, side: THREE.DoubleSide });
+cutGroup.add(new THREE.Mesh(ringGeo(R.memInner, R.memOuter), memCutMat));
+
+/* 4. Cytoplasm */
+const cytoShellMat = new THREE.MeshLambertMaterial({
+  color: COL.cytoplasm, side: THREE.BackSide, clippingPlanes: clipList,
+});
+shellGroup.add(new THREE.Mesh(shellGeo(R.cytoR), cytoShellMat));
+
+const cytoCutMat = new THREE.MeshBasicMaterial({ color: COL.cytoplasm, side: THREE.DoubleSide });
+cutGroup.add(new THREE.Mesh(new THREE.CircleGeometry(R.cytoR, RING_SEG), cytoCutMat));
+
+const cytoCutShadow = new THREE.MeshBasicMaterial({
+  color: COL.cytoplasmD, transparent: true, opacity: 0.30, side: THREE.DoubleSide,
+});
+const cytoShadowMesh = new THREE.Mesh(new THREE.RingGeometry(R.cytoR * 0.72, R.cytoR, RING_SEG), cytoCutShadow);
+cytoShadowMesh.position.z = -0.001;
+cutGroup.add(cytoShadowMesh);
+
+/* ============================================================
+   NUCLEOID
+   ============================================================ */
+const nucleoidMatA = new THREE.MeshLambertMaterial({ color: COL.nucleoidA, clippingPlanes: clipList });
+const nucleoidMatB = new THREE.MeshLambertMaterial({ color: COL.nucleoidB, clippingPlanes: clipList });
+
+const nucleoid = new THREE.Group();
+const NRNG = makeRng(1337);
+const STRANDS = 8;
+
+for (let s = 0; s < STRANDS; s++) {
+  const pts = [];
+  const loops = 1.8 + (s % 4) * 0.55;
+  const baseR = 0.52 + (s % 5) * 0.075;
+  const zAmp  = 0.34 - (s % 3) * 0.07;
+  const phase = s * 1.31;
+  const SEG = 46;
+
+  for (let i = 0; i < SEG; i++) {
+    const t = i / (SEG - 1);
+    const a = t * Math.PI * 2 * loops + phase;
+    const rr = baseR
+      + 0.17 * Math.sin(t * 17 + phase * 2.1)
+      + 0.10 * Math.cos(t * 31 + phase * 1.4);
+
+    pts.push(new THREE.Vector3(
+      Math.cos(a) * rr * 0.95 + 0.05 * Math.sin(t * 9 + phase),
+      Math.sin(a) * rr * 0.85 + 0.04 * Math.cos(t * 13 + phase * 1.5),
+      Math.cos(a * 1.6 + phase * 0.7) * zAmp
+    ));
+  }
+
+  const curve = new THREE.CatmullRomCurve3(pts, true, 'catmullrom', 0.5);
+  const tubeR = 0.026 + (s % 3) * 0.007;
+  const tube = new THREE.Mesh(
+    new THREE.TubeGeometry(curve, 78, tubeR, 4, true),
+    s % 2 === 0 ? nucleoidMatA : nucleoidMatB
+  );
+  nucleoid.add(tube);
+}
+scene.add(nucleoid);
+
+const nucleoidHaloMat = new THREE.MeshBasicMaterial({
+  color: COL.nucleoidGlow,
+  transparent: true, opacity: 0.13,
+  depthWrite: false,
+  blending: THREE.AdditiveBlending,
+  clippingPlanes: clipList,
+});
+const nucleoidHalo = new THREE.Mesh(new THREE.SphereGeometry(0.78, 18, 14), nucleoidHaloMat);
+nucleoidHalo.scale.set(1.15, 0.85, 0.55);
+scene.add(nucleoidHalo);
+
+/* ============================================================
+   RIBOSOMES
+   ============================================================ */
+const RIBO_COUNT = 190;
+const riboGeo = new THREE.SphereGeometry(0.036, 5, 4);
+const riboMat = new THREE.MeshLambertMaterial({ color: 0xffffff, clippingPlanes: clipList });
+const ribosomes = new THREE.InstancedMesh(riboGeo, riboMat, RIBO_COUNT);
+
+const riboRng = makeRng(4242);
+const _m4 = new THREE.Matrix4();
+const _col = new THREE.Color();
+const riboPositions = [];
+
+for (let i = 0; i < RIBO_COUNT; i++) {
+  let x, y, z, d2;
+  do {
+    x = (riboRng() * 2 - 1) * 1.02;
+    y = (riboRng() * 2 - 1) * 0.76;
+    z = (riboRng() * 2 - 1) * 0.58;
+    d2 = (x / 1.05) ** 2 + (y / 0.78) ** 2 + (z / 0.60) ** 2;
+  } while (d2 > 0.88);
+
+  const coreDist = (x / 0.85) ** 2 + (y / 0.66) ** 2 + (z / 0.36) ** 2;
+  if (coreDist < 0.9) { i--; continue; }
+
+  _m4.makeTranslation(x, y, z);
+  ribosomes.setMatrixAt(i, _m4);
+  riboPositions.push(new THREE.Vector3(x, y, z));
+
+  const t = riboRng();
+  _col.setHSL(0.55 + t * 0.04, 0.30 + t * 0.18, 0.38 + t * 0.22);
+  ribosomes.setColorAt(i, _col);
+}
+ribosomes.instanceMatrix.needsUpdate = true;
+if (ribosomes.instanceColor) ribosomes.instanceColor.needsUpdate = true;
+ribosomes.computeBoundingSphere();
+scene.add(ribosomes);
+
+/* ============================================================
+   STRUCTURE DATA
+   ============================================================ */
+const STRUCTURES = {
+  'Cell Wall': {
+    type: 'Peptidoglycan layer (murein)',
+    color: '#c9a94f',
+    desc: 'A rigid mesh of sugar chains cross-linked by short peptides. It protects the cell and maintains its shape, and stops the cell from bursting under osmotic pressure.',
+    stats: [['Thickness','10 – 80 nm'],['Polymer','Peptidoglycan'],['Cross-links','NAG – NAM peptides'],['Target of','Penicillin, lysozyme'],['Function','Shape & protection']],
+  },
+  'Cell Membrane': {
+    type: 'Phospholipid bilayer',
+    color: '#3d8a95',
+    desc: 'The cell barrier that regulates the movement of substances in and out. A fluid mosaic of phospholipids and proteins, it also hosts the machinery for respiration and ATP synthesis.',
+    stats: [['Thickness','~7.5 nm'],['Structure','Lipid bilayer'],['Transport','Proteins & pumps'],['Energy role','ATP synthesis site'],['Selectivity','Semi-permeable']],
+  },
+  'Cytoplasm': {
+    type: 'Gel-like cytosol',
+    color: '#c2dbe6',
+    desc: 'The gel-like fluid that fills the cell and supports the cell components. It is packed with enzymes, ribosomes, tRNA, ions and storage granules, but contains no membrane-bound organelles.',
+    stats: [['Composition','~80% water'],['pH','7.4 – 7.6'],['Contains','Ribosomes, enzymes'],['Organelles','None (membrane-bound)'],['Inclusions','Glycogen, lipids, sulfur']],
+  },
+  'Capsule': {
+    type: 'Glycocalyx — outermost layer',
+    color: '#8fc8bd',
+    desc: 'A sticky outermost coat of polysaccharides or polypeptides. It shields the cell from drying out, helps it adhere to surfaces, and blocks the host immune system from recognising it.',
+    stats: [['Thickness','10 nm – 400 nm'],['Composition','Polysaccharide / protein'],['Function','Protection & adhesion'],['Found in','Encapsulated bacteria'],['Virulence role','Evades phagocytosis']],
+  },
+  'Nucleoid': {
+    type: 'Circular DNA — no membrane',
+    color: '#5a5fa8',
+    desc: 'The nucleoid region with free DNA. The circular DNA is loose in the cytoplasm and is not enclosed in a nucleus — this is the defining feature of a prokaryote. The nucleoid has no membrane of its own.',
+    stats: [['Form','Circular dsDNA'],['Length','~4.6 million bp'],['Stretched out','~1.6 mm'],['Membrane','None — free in cytoplasm'],['Packaging','Supercoiling + proteins']],
+  },
+  'Ribosomes': {
+    type: '70S ribosomes',
+    color: '#547a94',
+    desc: 'Small particles that synthesize proteins, scattered freely throughout the cytoplasm. Bacterial ribosomes are 70S (50S + 30S), smaller than eukaryotic 80S — which is why many antibiotics target them safely.',
+    stats: [['Type','70S'],['Subunits','50S + 30S'],['Composition','rRNA + protein'],['Abundance','~10,000 – 100,000'],['Target of','Tetracycline, erythromycin']],
+  },
+};
+
+/* ============================================================
+   LABEL ANCHORS
+   ============================================================ */
+function anchor(parent, x, y, z) {
+  const o = new THREE.Object3D();
+  o.position.set(x, y, z);
+  parent.add(o);
+  return o;
+}
+
+let riboLabelPos = new THREE.Vector3(0.72, -0.36, -0.02);
+for (const p of riboPositions) {
+  if (p.x > 0.4 && p.x < 0.95 && p.y < -0.15 && p.y > -0.6) {
+    riboLabelPos.copy(p);
+    break;
+  }
+}
+
+const labelAnchors = [
+  { name: 'Capsule',         obj: anchor(scene, -1.62, 0.58, -0.01) },
+  { name: 'Cell Wall',       obj: anchor(scene, -1.42, 0.30, -0.01) },
+  { name: 'Cell Membrane',   obj: anchor(scene, -1.24, -0.22, -0.01) },
+  { name: 'Cytoplasm',       obj: anchor(scene, -0.78, -0.44, -0.01) },
+  { name: 'Nucleoid',        obj: anchor(scene,  0.32, 0.26, -0.01) },
+  { name: 'Ribosomes',       obj: anchor(scene, riboLabelPos.x, riboLabelPos.y, -0.01) },
+];
+
+const labelsEl = document.getElementById('labels');
+const labelEls = new Map();
+
+for (const a of labelAnchors) {
+  const el = document.createElement('div');
+  el.className = 'label';
+  el.textContent = a.name;
+  el.addEventListener('pointerdown', (e) => e.stopPropagation());
+  el.addEventListener('click', (e) => { e.stopPropagation(); focusOn(a.name); });
+  labelsEl.appendChild(el);
+  labelEls.set(a.name, { el, anchor: a.obj });
+}
+
+let showLabels = true;
+let labelsDirty = true;
+const _wp = new THREE.Vector3();
+const _proj = new THREE.Vector3();
+
+function updateLabels() {
+  const W = window.innerWidth, H = window.innerHeight;
+  for (const [, entry] of labelEls) {
+    const el = entry.el;
+    if (!showLabels) { if (el.style.display !== 'none') el.style.display = 'none'; continue; }
+    if (el.style.display === 'none') el.style.display = '';
+
+    entry.anchor.getWorldPosition(_wp);
+    _proj.copy(_wp).project(camera);
+    if (_proj.z > 1) { el.style.opacity = '0'; continue; }
+
+    const x = (_proj.x * 0.5 + 0.5) * W;
+    const y = (-_proj.y * 0.5 + 0.5) * H;
+    const off = 32;
+    el.style.transform = `translate(-50%,-50%) translate(${x.toFixed(0)}px,${(y - off).toFixed(0)}px)`;
+    el.style.opacity = '1';
+  }
+  labelsDirty = false;
+}
+
+/* ============================================================
+   CAMERA FOCUS
+   ============================================================ */
+const focus = { name: null, state: 'free', offset: new THREE.Vector3(), prevPos: new THREE.Vector3(), goalPos: new THREE.Vector3(), goalTarget: new THREE.Vector3() };
+const FOCUS_DIST = {
+  'Capsule': 20, 'Cell Wall': 18, 'Cell Membrane': 17,
+  'Cytoplasm': 15, 'Nucleoid': 12, 'Ribosomes': 10,
+};
+const _fp = new THREE.Vector3(), _fq = new THREE.Vector3();
+
+function focusOn(name) {
+  const entry = labelEls.get(name);
+  if (!entry) return;
+  focus.name = name; focus.state = 'moving';
+  entry.anchor.getWorldPosition(_fp);
+  const dist = FOCUS_DIST[name] ?? 15;
+  _fq.copy(camera.position).sub(_fp);
+  if (_fq.lengthSq() < 1e-4) _fq.set(0.3, 0.25, 1);
+  _fq.normalize();
+  focus.offset.copy(_fq).multiplyScalar(dist);
+  focus.prevPos.copy(_fp);
+  controls.enabled = false;
+  showInfo(name); highlightLabel(name);
+  labelsDirty = true; needRender = true;
+}
+
+function resetView() {
+  focus.name = null; focus.state = 'moving';
+  focus.goalPos.copy(cameraHome); focus.goalTarget.set(0, 0, 0);
+  controls.enabled = false;
+  hideInfo(); highlightLabel(null);
+  labelsDirty = true; needRender = true;
+}
+
+function updateFocus(dt) {
+  if (focus.state === 'moving') {
+    let camPos, targetPos;
+    if (focus.name) {
+      targetPos = _fp;
+      labelEls.get(focus.name).anchor.getWorldPosition(targetPos);
+      camPos = _fq.copy(targetPos).add(focus.offset);
+    } else {
+      targetPos = _fp.copy(focus.goalTarget);
+      camPos = _fq.copy(focus.goalPos);
+    }
+    const k = 1 - Math.exp(-6 * dt);
+    camera.position.lerp(camPos, k);
+    controls.target.lerp(targetPos, k);
+    labelsDirty = true;
+    if (camera.position.distanceTo(camPos) < 0.2 && controls.target.distanceTo(targetPos) < 0.2) {
+      if (focus.name) {
+        focus.state = 'following';
+        labelEls.get(focus.name).anchor.getWorldPosition(focus.prevPos);
+      } else focus.state = 'free';
+      controls.enabled = true;
+    }
+  } else if (focus.state === 'following' && focus.name) {
+    labelEls.get(focus.name).anchor.getWorldPosition(_fp);
+    _fq.copy(_fp).sub(focus.prevPos);
+    camera.position.add(_fq); controls.target.add(_fq);
+    focus.prevPos.copy(_fp);
+    labelsDirty = true;
+  }
+}
+
+/* ============================================================
+   INFO PANEL
+   ============================================================ */
+const infoEl = document.getElementById('info');
+const infoName = document.getElementById('infoName');
+const infoType = document.getElementById('infoType');
+const infoDesc = document.getElementById('infoDesc');
+const infoStats = document.getElementById('infoStats');
+const infoSwatch = document.getElementById('infoSwatch');
+
+function showInfo(name) {
+  const d = STRUCTURES[name]; if (!d) return;
+  infoName.textContent = name;
+  infoType.textContent = d.type;
+  infoDesc.textContent = d.desc;
+  infoSwatch.style.color = d.color;
+  infoStats.innerHTML = d.stats.map(([k, v]) => `<div class="stat"><dt>${k}</dt><dd>${v}</dd></div>`).join('');
+  infoEl.classList.add('show');
+}
+function hideInfo() { infoEl.classList.remove('show'); }
+document.getElementById('infoClose').addEventListener('click', () => { hideInfo(); highlightLabel(null); });
+function highlightLabel(name) {
+  for (const [n, e] of labelEls) e.el.classList.toggle('active', n === name);
+}
+
+/* ============================================================
+   INTERACTION
+   ============================================================ */
+const raycaster = new THREE.Raycaster();
+const ndc = new THREE.Vector2();
+let downX = 0, downY = 0, downT = 0;
+
+function setNDC(e) {
+  ndc.x = (e.clientX / window.innerWidth) * 2 - 1;
+  ndc.y = -(e.clientY / window.innerHeight) * 2 + 1;
+}
+
+canvas.addEventListener('pointerdown', (e) => {
+  downX = e.clientX; downY = e.clientY; downT = performance.now();
+});
+
+canvas.addEventListener('pointerup', (e) => {
+  const moved = Math.hypot(e.clientX - downX, e.clientY - downY);
+  if (moved > 6 || performance.now() - downT > 500) return;
+
+  setNDC(e);
+  raycaster.setFromCamera(ndc, camera);
+  const hits = raycaster.intersectObjects([...shellGroup.children, nucleoid, ribosomes], true);
+  for (const h of hits) {
+    if (cutaway && h.point.z > 0.05) continue;
+    const n = h.object.userData.structure || h.object.parent?.userData.structure;
+    if (n) { focusOn(n); break; }
+  }
+});
+
+canvas.addEventListener('pointerenter', () => { canvas.style.cursor = 'grab'; });
+
+/* ============================================================
+   UI CONTROLS
+   ============================================================ */
+const cutBtn = document.getElementById('cutBtn');
+const labelsBtn = document.getElementById('labelsBtn');
+const spinBtn = document.getElementById('spinBtn');
+
+cutBtn.addEventListener('click', () => {
+  cutaway = !cutaway;
+  cutBtn.classList.toggle('active', cutaway);
+  cutBtn.textContent = cutaway ? 'Cross-Section' : 'Whole Cell';
+  cutTarget = cutaway ? 0 : 1000;
+  cutGroup.visible = cutaway;
+  needRender = true;
+});
+
+labelsBtn.addEventListener('click', () => {
+  showLabels = !showLabels;
+  labelsBtn.classList.toggle('active', showLabels);
+  labelsDirty = true; needRender = true;
+});
+
+spinBtn.addEventListener('click', () => {
+  controls.autoRotate = !controls.autoRotate;
+  controls.autoRotateSpeed = 0.4;
+  spinBtn.classList.toggle('active', controls.autoRotate);
+  needRender = true;
+});
+
+document.getElementById('resetBtn').addEventListener('click', resetView);
+
+window.addEventListener('keydown', (e) => {
+  if (e.code === 'Escape') resetView();
+  if (e.code === 'KeyC') cutBtn.click();
+  if (e.code === 'KeyL') labelsBtn.click();
+});
+
+controls.addEventListener('change', () => { needRender = true; labelsDirty = true; });
+
+/* ============================================================
+   RESIZE
+   ============================================================ */
+function onResize() {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  needRender = true; labelsDirty = true;
+}
+window.addEventListener('resize', onResize);
+
+/* ============================================================
+   MAIN LOOP
+   ============================================================ */
+const FRAME_MS = 1000 / 30;
+let last = performance.now();
+let needRender = true;
+let nucleoidSpin = 0;
+
+function tick(now) {
+  requestAnimationFrame(tick);
+  const elapsed = now - last;
+  if (elapsed < FRAME_MS) return;
+  const dt = Math.min(elapsed / 1000, 0.1);
+  last = now;
+
+  const camMoving = focus.state === 'moving' || focus.state === 'following';
+  const spin = controls.autoRotate;
+  const cutAnimating = Math.abs(cutCurrent - cutTarget) > 0.05;
+
+  if (!needRender && !camMoving && !spin && !cutAnimating) return;
+
+  if (cutAnimating) {
+    cutCurrent += (cutTarget - cutCurrent) * (1 - Math.exp(-8 * dt));
+    cutPlane.constant = cutCurrent;
+  }
+
+  if (cutaway) {
+    nucleoidSpin += dt * 0.10;
+    nucleoid.rotation.y = Math.sin(nucleoidSpin) * 0.09;
+    nucleoid.rotation.x = Math.cos(nucleoidSpin * 0.8) * 0.05;
+    nucleoidHalo.rotation.y = nucleoid.rotation.y * 0.5;
+  }
+
+  updateFocus(dt);
+  controls.update();
+  if (labelsDirty) updateLabels();
+
+  renderer.render(scene, camera);
+  needRender = false;
+}
+
+canvas.style.cursor = 'grab';
+cutGroup.visible = true;
+requestAnimationFrame(tick);
+</script>
+</body>
+</html>
